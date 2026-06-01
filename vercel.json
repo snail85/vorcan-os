@@ -1,0 +1,134 @@
+import { useState, useRef } from 'react';
+import { FileText, Upload, Search, Filter, Download, Trash2, Tag } from 'lucide-react';
+import { fmtDate, DOC_TYPES } from '../lib/data';
+
+const TYPE_COLORS = { Proposal:'#FEF3C7:#92400E', Contract:'#F0FFF4:#276749', NDA:'#EBF4FF:#2B6CB0', Invoice:'#FFF0E0:#C05621', Receipt:'#F5F3FF:#553C9A', Assessment:'#E5E0DF:#4A5568', Other:'#F7FAFC:#718096' };
+
+function typeStyle(type) {
+  const map = {
+    Proposal:{ bg:'#FEF3C7', color:'#92400E' }, Contract:{ bg:'#F0FFF4', color:'#276749' },
+    NDA:{ bg:'#EBF4FF', color:'#2B6CB0' }, Invoice:{ bg:'#FFF0E0', color:'#C05621' },
+    Receipt:{ bg:'#F5F3FF', color:'#553C9A' }, Assessment:{ bg:'#E5E0DF', color:'#4A5568' },
+    Other:{ bg:'#F7FAFC', color:'#718096' }
+  };
+  return map[type] || map.Other;
+}
+
+export default function Documents({ data, setData }) {
+  const [search, setSearch] = useState('');
+  const [filterType, setFilterType] = useState('All');
+  const [dragOver, setDragOver] = useState(false);
+  const fileRef = useRef();
+  const { documents, companies, deals } = data;
+
+  const filtered = documents.filter(d => {
+    const matchSearch = !search || d.name.toLowerCase().includes(search.toLowerCase());
+    const matchType = filterType === 'All' || d.type === filterType;
+    return matchSearch && matchType;
+  });
+
+  const handleDrop = (e) => {
+    e.preventDefault(); setDragOver(false);
+    const files = Array.from(e.dataTransfer?.files || []);
+    handleFiles(files);
+  };
+
+  const handleFiles = (files) => {
+    const newDocs = files.map((f,i) => ({
+      id: 'doc' + Date.now() + i, name: f.name,
+      type: guessType(f.name), dealId: null, companyId: null,
+      size: formatSize(f.size), uploadedAt: new Date().toISOString().split('T')[0], uploadedBy: 'Craig'
+    }));
+    setData(prev => ({ ...prev, documents: [...newDocs, ...prev.documents] }));
+  };
+
+  const guessType = (name) => {
+    const n = name.toLowerCase();
+    if (n.includes('proposal')) return 'Proposal';
+    if (n.includes('contract')) return 'Contract';
+    if (n.includes('nda')) return 'NDA';
+    if (n.includes('invoice')) return 'Invoice';
+    if (n.includes('receipt')) return 'Receipt';
+    return 'Other';
+  };
+
+  const formatSize = (bytes) => {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024*1024) return (bytes/1024).toFixed(1) + ' KB';
+    return (bytes/(1024*1024)).toFixed(1) + ' MB';
+  };
+
+  return (
+    <div style={{ padding:'28px 32px' }}>
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:24 }}>
+        <div>
+          <h1 style={{ fontSize:22, fontWeight:700, color:'#0F1921' }}>Documents</h1>
+          <p style={{ color:'#9BA5AF', fontSize:13, marginTop:2 }}>{documents.length} documents across all deals</p>
+        </div>
+        <button className="btn btn-primary btn-sm" onClick={()=>fileRef.current?.click()}>
+          <Upload size={13} /> Upload
+        </button>
+        <input ref={fileRef} type="file" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg" style={{ display:'none' }} onChange={e=>handleFiles(Array.from(e.target.files))} />
+      </div>
+
+      {/* Drop zone */}
+      <div className={`drop-zone ${dragOver?'active':''}`} style={{ marginBottom:20 }}
+        onDragOver={e=>{e.preventDefault();setDragOver(true)}}
+        onDragLeave={()=>setDragOver(false)}
+        onDrop={handleDrop}
+        onClick={()=>fileRef.current?.click()}
+      >
+        <Upload size={24} color="#C6A969" style={{ marginBottom:8 }} />
+        <div style={{ fontWeight:600, fontSize:13, color:'#0F1921', marginBottom:4 }}>Drop files here or click to upload</div>
+        <div style={{ fontSize:12, color:'#9BA5AF' }}>PDF, Word, Excel, Images — Claude will auto-detect type and link to deals</div>
+      </div>
+
+      {/* Filters */}
+      <div style={{ display:'flex', gap:8, marginBottom:16, flexWrap:'wrap' }}>
+        <div style={{ display:'flex', alignItems:'center', gap:8, background:'#fff', border:'1px solid #E2DDD9', borderRadius:6, padding:'6px 12px', flex:1, maxWidth:280 }}>
+          <Search size={13} color="#9BA5AF" />
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search documents…" style={{ border:'none', outline:'none', padding:0, fontSize:13 }} />
+        </div>
+        {['All',...DOC_TYPES].map(t => (
+          <button key={t} onClick={()=>setFilterType(t)} className="btn btn-sm" style={{ background: filterType===t ? '#0F1921' : '#fff', color: filterType===t ? '#fff' : '#5A6472', border:'1px solid #E2DDD9' }}>{t}</button>
+        ))}
+      </div>
+
+      {/* Table */}
+      <div className="card">
+        <table>
+          <thead><tr><th>Document</th><th>Type</th><th>Deal</th><th>Company</th><th>Size</th><th>Uploaded</th><th></th></tr></thead>
+          <tbody>
+            {filtered.map(doc => {
+              const deal = deals.find(d=>d.id===doc.dealId);
+              const co = companies.find(c=>c.id===doc.companyId);
+              const ts = typeStyle(doc.type);
+              return (
+                <tr key={doc.id}>
+                  <td>
+                    <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                      <div style={{ width:32, height:32, borderRadius:6, background:ts.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:9, fontWeight:700, color:ts.color }}>PDF</div>
+                      <span style={{ fontWeight:500, fontSize:13 }}>{doc.name}</span>
+                    </div>
+                  </td>
+                  <td><span style={{ fontSize:11, padding:'3px 8px', borderRadius:20, fontWeight:600, background:ts.bg, color:ts.color }}>{doc.type}</span></td>
+                  <td style={{ fontSize:12, color:'#5A6472' }}>{deal?.title || '—'}</td>
+                  <td style={{ fontSize:12, color:'#5A6472' }}>{co?.name || '—'}</td>
+                  <td style={{ fontSize:12, color:'#9BA5AF' }}>{doc.size}</td>
+                  <td style={{ fontSize:12, color:'#9BA5AF' }}>{fmtDate(doc.uploadedAt)}</td>
+                  <td>
+                    <div style={{ display:'flex', gap:4 }}>
+                      <button className="btn btn-ghost btn-icon btn-sm"><Download size={13} /></button>
+                      <button className="btn btn-ghost btn-icon btn-sm" onClick={()=>setData(prev=>({...prev,documents:prev.documents.filter(d=>d.id!==doc.id)}))}><Trash2 size={13} color="#F87171" /></button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        {filtered.length===0 && <div style={{ textAlign:'center', padding:'40px', color:'#9BA5AF', fontSize:13 }}>No documents found</div>}
+      </div>
+    </div>
+  );
+}
